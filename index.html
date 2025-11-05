@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Личный финансовый помощник</title>
+    <style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    padding: 20px;
+    color: #333;
+}
+
+.container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+header {
+    text-align: center;
+    color: white;
+    margin-bottom: 30px;
+}
+
+header h1 {
+    font-size: 2.5em;
+    margin-bottom: 10px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+}
+
+.subtitle {
+    font-size: 1.1em;
+    opacity: 0.9;
+}
+
+.card {
+    background: white;
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.card h2 {
+    margin-bottom: 20px;
+    color: #667eea;
+    font-size: 1.5em;
+}
+
+.upload-area {
+    border: 3px dashed #667eea;
+    border-radius: 8px;
+    padding: 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: #f8f9ff;
+}
+
+.upload-area:hover {
+    background: #f0f2ff;
+    border-color: #764ba2;
+}
+
+.upload-content svg {
+    color: #667eea;
+    margin-bottom: 15px;
+}
+
+.upload-content p {
+    font-size: 1.1em;
+    margin-bottom: 5px;
+    color: #333;
+}
+
+.upload-content small {
+    color: #666;
+}
+
+.file-info {
+    margin-top: 15px;
+    padding: 15px;
+    background: #e8f5e9;
+    border-radius: 6px;
+}
+
+.file-info p {
+    margin: 5px 0;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #333;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 1em;
+    transition: border-color 0.3s ease;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.form-group small {
+    display: block;
+    margin-top: 5px;
+    color: #666;
+    font-size: 0.9em;
+}
+
+.action-section {
+    text-align: center;
+    margin: 30px 0;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 15px 40px;
+    font-size: 1.1em;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+}
+
+.btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.summary {
+    background: #f8f9ff;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.summary-item {
+    margin: 10px 0;
+    padding: 10px;
+    background: white;
+    border-radius: 6px;
+    border-left: 4px solid #667eea;
+}
+
+.recommendations {
+    background: #fff9e6;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #ffc107;
+}
+
+.recommendations h3 {
+    margin-bottom: 15px;
+    color: #764ba2;
+}
+
+.recommendations p {
+    line-height: 1.8;
+    margin: 10px 0;
+    white-space: pre-wrap;
+}
+
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: white;
+}
+
+.spinner {
+    border: 4px solid rgba(255,255,255,0.3);
+    border-top: 4px solid white;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-message {
+    background: #ffebee;
+    color: #c62828;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #c62828;
+    margin: 20px 0;
+}
+
+footer {
+    text-align: center;
+    color: white;
+    margin-top: 40px;
+    opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+    header h1 {
+        font-size: 2em;
+    }
+    
+    .card {
+        padding: 20px;
+    }
+}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💰 Личный финансовый помощник</h1>
+            <p class="subtitle">Анализ транзакций и персональные рекомендации</p>
+        </header>
+
+        <main>
+            <section class="card">
+                <h2>📁 Загрузка транзакций</h2>
+                <div class="upload-area" id="uploadArea">
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
+                    <div class="upload-content">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p>Нажмите для выбора файла Excel</p>
+                        <small>Поддерживаются форматы .xlsx и .xls</small>
+                    </div>
+                </div>
+                <div id="fileInfo" class="file-info" style="display: none;">
+                    <p><strong>Файл:</strong> <span id="fileName"></span></p>
+                    <p><strong>Транзакций:</strong> <span id="transactionCount"></span></p>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>🤖 Настройка AI модели</h2>
+                <div class="form-group">
+                    <label for="modelName">Название модели Hugging Face:</label>
+                    <input type="text" id="modelName" 
+                           placeholder="например: microsoft/DialoGPT-medium или meta-llama/Llama-2-7b-chat-hf"
+                           value="microsoft/DialoGPT-medium">
+                    <small>Укажите полное название модели из Hugging Face</small>
+                </div>
+                <div class="form-group">
+                    <label for="apiKey">API ключ (опционально):</label>
+                    <input type="password" id="apiKey" 
+                           placeholder="Оставьте пустым для публичных моделей">
+                    <small>Нужен для приватных моделей или для увеличения лимитов</small>
+                </div>
+            </section>
+
+            <div class="action-section">
+                <button id="analyzeBtn" class="btn-primary" disabled>
+                    🔍 Анализировать транзакции
+                </button>
+            </div>
+
+            <section class="card" id="resultsSection" style="display: none;">
+                <h2>📊 Результаты анализа</h2>
+                <div id="summary" class="summary"></div>
+                <div id="recommendations" class="recommendations"></div>
+            </section>
+
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Анализирую транзакции...</p>
+            </div>
+
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+        </main>
+
+        <footer>
+            <p>Прототип финансового помощника | 2024</p>
+        </footer>
+    </div>
+
+    <script>
+// API URL - измените на ваш адрес backend сервера, если нужно
+const API_URL = 'http://localhost:8000';
+
+let uploadedTransactions = null;
+
+// Элементы DOM
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+const fileName = document.getElementById('fileName');
+const transactionCount = document.getElementById('transactionCount');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const modelNameInput = document.getElementById('modelName');
+const apiKeyInput = document.getElementById('apiKey');
+const resultsSection = document.getElementById('resultsSection');
+const summary = document.getElementById('summary');
+const recommendations = document.getElementById('recommendations');
+const loading = document.getElementById('loading');
+const errorMessage = document.getElementById('errorMessage');
+
+// Обработка загрузки файла
+uploadArea.addEventListener('click', () => {
+    fileInput.click();
+});
+
+uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.style.background = '#f0f2ff';
+});
+
+uploadArea.addEventListener('dragleave', () => {
+    uploadArea.style.background = '#f8f9ff';
+});
+
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.style.background = '#f8f9ff';
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        handleFile(files[0]);
+    }
+});
+
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+    }
+});
+
+async function handleFile(file) {
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+        showError('Пожалуйста, выберите файл Excel (.xlsx или .xls)');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        loading.style.display = 'block';
+        errorMessage.style.display = 'none';
+
+        const response = await fetch(`${API_URL}/upload-transactions`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            uploadedTransactions = data.transactions;
+            fileName.textContent = file.name;
+            transactionCount.textContent = data.transactions.length;
+            fileInfo.style.display = 'block';
+            analyzeBtn.disabled = false;
+        } else {
+            showError('Ошибка при загрузке файла: ' + (data.detail || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        showError('Ошибка при загрузке файла: ' + error.message);
+    } finally {
+        loading.style.display = 'none';
+    }
+}
+
+// Обработка анализа
+analyzeBtn.addEventListener('click', async () => {
+    if (!uploadedTransactions) {
+        showError('Сначала загрузите файл с транзакциями');
+        return;
+    }
+
+    const modelName = modelNameInput.value.trim();
+    if (!modelName) {
+        showError('Пожалуйста, укажите название модели');
+        return;
+    }
+
+    const apiKey = apiKeyInput.value.trim() || null;
+
+    try {
+        loading.style.display = 'block';
+        errorMessage.style.display = 'none';
+        resultsSection.style.display = 'none';
+        analyzeBtn.disabled = true;
+
+        const response = await fetch(`${API_URL}/analyze-transactions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                transactions: uploadedTransactions,
+                model_name: modelName,
+                api_key: apiKey
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            displayResults(data.analysis, data.recommendations);
+        } else {
+            showError('Ошибка при анализе: ' + (data.detail || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        showError('Ошибка при анализе: ' + error.message);
+    } finally {
+        loading.style.display = 'none';
+        analyzeBtn.disabled = false;
+    }
+});
+
+function displayResults(analysis, recommendationsText) {
+    // Отображение сводки
+    summary.innerHTML = `
+        <h3>📈 Сводка транзакций</h3>
+        <div class="summary-item">
+            <strong>Всего транзакций:</strong> ${analysis.total_count}
+        </div>
+        <div class="summary-item">
+            <strong>Общая сумма:</strong> ${formatCurrency(analysis.total_amount)}
+        </div>
+        ${Object.keys(analysis.categories).length > 0 ? `
+            <div class="summary-item">
+                <strong>По категориям:</strong>
+                <ul style="margin-top: 10px; padding-left: 20px;">
+                    ${Object.entries(analysis.categories).map(([cat, amount]) => 
+                        `<li>${cat}: ${formatCurrency(amount)}</li>`
+                    ).join('')}
+                </ul>
+            </div>
+        ` : ''}
+    `;
+
+    // Отображение рекомендаций
+    recommendations.innerHTML = `
+        <h3>💡 Персональные рекомендации</h3>
+        <p>${recommendationsText}</p>
+    `;
+
+    resultsSection.style.display = 'block';
+    resultsSection.scrollIntoView({ behavior: 'smooth' });
+}
+
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('ru-RU', {
+        style: 'currency',
+        currency: 'RUB'
+    }).format(amount);
+}
+
+function showError(message) {
+    errorMessage.textContent = message;
+    errorMessage.style.display = 'block';
+    setTimeout(() => {
+        errorMessage.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+}
+    </script>
+</body>
+</html>
