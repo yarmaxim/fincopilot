@@ -1,0 +1,838 @@
+<!doctype html>
+<html lang="ru" class="bg-slate-50 text-slate-900">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Личный финансовый помощник</title>
+    <!-- Tailwind Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {},
+        },
+      };
+    </script>
+    <!-- React 18 + ReactDOM UMD -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Recharts UMD -->
+    <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+    <!-- Babel for JSX in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  </head>
+  <body class="min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const {
+        useEffect, useMemo, useRef, useState
+      } = React;
+
+      const {
+        PieChart, Pie, Cell, Tooltip: RTooltip, ResponsiveContainer,
+        LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar, Treemap
+      } = Recharts;
+
+      // --- Minimal UI bits ---
+      const Button = ({className = "", ...p}) => (
+        <button {...p} className={"px-3 py-2 rounded-2xl shadow-sm text-sm font-medium bg-slate-800 text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed " + className} />
+      );
+      const SecondaryButton = ({className = "", ...p}) => (
+        <button {...p} className={"px-3 py-2 rounded-2xl text-sm font-medium bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-slate-100 hover:opacity-90 disabled:opacity-50 " + className} />
+      );
+      const Card = ({title, right, className = "", children}) => (
+        <div className={"rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-sm " + className}>
+          {(title || right) && (
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h3>
+              <div>{right}</div>
+            </div>
+          )}
+          {children}
+        </div>
+      );
+
+      // --- Types (implicit in JS) ---
+
+      // --- i18n ---
+      const dict = {
+        en: {
+          appTitle: "Personal Finance Assistant",
+          onboarding: ["Import", "Map columns", "Overview"],
+          dropFiles: "Drag & drop bank files (CSV, OFX/QFX, MT940)",
+          orClick: "or click to choose",
+          preview: "Preview (first 50 rows)",
+          mapping: "Column Mapping",
+          validations: "Validations",
+          date: "Date",
+          amount: "Amount",
+          currency: "Currency",
+          description: "Description/Memo",
+          counterparty: "Counterparty",
+          category: "Category",
+          account: "Account",
+          next: "Next",
+          back: "Back",
+          process: "Process",
+          dashboard: "Dashboard",
+          kpi: "KPIs",
+          expensesByCat: "Expenses by Category",
+          trend: "Monthly Trend",
+          topCounterparties: "Top Counterparties",
+          flow: "Income / Expense / Net",
+          advice: "Recommendations",
+          quickActions: "Quick actions",
+          ideasMonth: "Ideas for this month",
+          disclaimer: "Disclaimers",
+          erase: "Erase data",
+          privacy: "Privacy",
+          openPrivacy: "Open privacy policy",
+          exportCSV: "Export CSV",
+          exportPDF: "Export Report (PDF)",
+          theme: "Theme",
+          rules: "Categorization Rules",
+          addRule: "Add Rule",
+          baseCurrency: "Base currency",
+          locale: "Locale",
+          runTests: "Run parser tests",
+          optInLLM: "Enable remote LLM (aggregates only)",
+        },
+        ru: {
+          appTitle: "Личный финансовый помощник",
+          onboarding: ["Импорт", "Маппинг", "Обзор"],
+          dropFiles: "Перетащите файлы банка (CSV, OFX/QFX, MT940)",
+          orClick: "или нажмите для выбора",
+          preview: "Предпросмотр (первые 50 строк)",
+          mapping: "Маппинг столбцов",
+          validations: "Валидаторы",
+          date: "Дата",
+          amount: "Сумма",
+          currency: "Валюта",
+          description: "Описание/Мемо",
+          counterparty: "Контрагент",
+          category: "Категория",
+          account: "Счёт",
+          next: "Далее",
+          back: "Назад",
+          process: "Обработать",
+          dashboard: "Дашборд",
+          kpi: "KPI",
+          expensesByCat: "Расходы по категориям",
+          trend: "Динамика по месяцам",
+          topCounterparties: "Топ контрагентов",
+          flow: "Доходы / Расходы / Нетто",
+          advice: "Рекомендации",
+          quickActions: "Быстрые действия",
+          ideasMonth: "Идеи на месяц",
+          disclaimer: "Дисклеймеры",
+          erase: "Стереть данные",
+          privacy: "Конфиденциальность",
+          openPrivacy: "Открыть политику",
+          exportCSV: "Экспорт CSV",
+          exportPDF: "Экспорт отчёта (PDF)",
+          theme: "Тема",
+          rules: "Правила категоризации",
+          addRule: "Добавить правило",
+          baseCurrency: "Базовая валюта",
+          locale: "Локаль",
+          runTests: "Запустить тесты парсеров",
+          optInLLM: "Включить внешний LLM (только агрегаты)",
+        }
+      };
+
+      // --- Utilities: locale formatters ---
+      function useFormatter(locale, currency) {
+        const money = useMemo(() => new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 2 }), [locale, currency]);
+        const date = useMemo(() => new Intl.DateTimeFormat(locale, { year: 'numeric', month: '2-digit', day: '2-digit' }), [locale]);
+        return { money, date };
+      }
+
+      // --- Categorization Rules storage ---
+      const RULES_KEY = 'pf_rules_v1';
+      function loadRules() { try { return JSON.parse(localStorage.getItem(RULES_KEY) || '[]'); } catch { return []; } }
+      function saveRules(r) { localStorage.setItem(RULES_KEY, JSON.stringify(r)); }
+
+      // --- IndexedDB wipe ---
+      async function wipeIndexedDB() {
+        if (!('indexedDB' in window)) return;
+        const dbs = (indexedDB.databases && await indexedDB.databases()) || [];
+        await Promise.all(dbs.map(d => new Promise(res => {
+          const del = indexedDB.deleteDatabase(d.name);
+          del.onsuccess = del.onerror = del.onblocked = () => res();
+        })));
+      }
+
+      // --- Worker: parsing + normalization + aggregates ---
+      function createWorker() {
+        const code = `
+          const textDecoder = new TextDecoder();
+          function sniffDelimiter(sample) {
+            const counts = { ',': 0, ';': 0, '\\\\t': 0 };
+            for (const ch of sample) { if (ch===','||ch===';'||ch==='\\t') counts[ch==='\\t'?'\\\\t':ch]++; }
+            let best = ','; let max = -1; for (const k in counts){ if (counts[k]>max){ max=k; best=k; } }
+            return best==='\\\\t'?'\\t':best;
+          }
+          function csvParse(txt) {
+            const delim = sniffDelimiter(txt.slice(0, 2000));
+            const lines = txt.replace(/\\r\\n?/g,'\\n').split('\\n').filter(Boolean);
+            const rows = lines.map(line => {
+              const out=[]; let cur=''; let q=false; for(let i=0;i<line.length;i++){ const c=line[i]; if(c=='\"'){ if(q && line[i+1]=='\"'){ cur+='\"'; i++; } else { q=!q; } } else if(c===delim && !q){ out.push(cur); cur=''; } else { cur+=c; } } out.push(cur); return out;
+            });
+            return { header: rows[0], rows: rows.slice(1) };
+          }
+          function parseOFX(txt){
+            const items = [];
+            const blocks = txt.split(/<STMTTRN>/i).slice(1);
+            for(const b of blocks){
+              const get = (tag) => (b.match(new RegExp('<'+tag+'>\\\\s*([^<\\n\\r]+)','i'))||[])[1] || '';
+              const d = get('DTPOSTED').trim().slice(0,8);
+              const date = d? (d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6,8)) : '';
+              const amount = parseFloat(get('TRNAMT').replace(',','.')) || 0;
+              const description = (get('NAME')+ ' ' + get('MEMO')).trim();
+              const currency = (get('CURRENCY')||'').trim() || 'XXX';
+              items.push({ date, amount, currency, description });
+            }
+            return items;
+          }
+          function parseMT940(txt){
+            const lines = txt.replace(/\\r\\n?/g,'\\n').split('\\n');
+            const items=[]; let cur=null;
+            for(const ln of lines){
+              if(ln.startsWith(':61:')){
+                if(cur) items.push(cur); cur={ date:'', amount:0, currency:'XXX', description:'' };
+                const m = ln.match(/:61:(\\d{6})([DC])(\\d+[,\\.]\\d{0,2})/);
+                if(m){ const ymd=m[1]; const year='20'+ymd.slice(0,2); const date=year+'-'+ymd.slice(2,4)+'-'+ymd.slice(4,6); cur.date=date; cur.amount=parseFloat(m[3].replace(',','.')); if(m[2]==='D') cur.amount*=-1; }
+              } else if(ln.startsWith(':86:') && cur){ cur.description += ln.slice(4).trim(); }
+            }
+            if(cur) items.push(cur); return items;
+          }
+          function normalizeDescription(s){
+            return s.replace(/\\s+/g,' ').replace(/\\*+/g,'').replace(/[0-9]{6,}/g,'').replace(/[\\[\\]()#]/g,'').trim().toUpperCase();
+          }
+          function clusterCounterparties(descs){
+            const norms = descs.map(d=>normalizeDescription(d));
+            const sets = norms.map(n=> new Set(n.split(/\\s+/).filter(Boolean)) );
+            const labels = Array(descs.length).fill(-1); let cid=0;
+            for(let i=0;i<sets.length;i++){
+              if(labels[i]!==-1) continue; labels[i]=cid;
+              for(let j=i+1;j<sets.length;j++){
+                if(labels[j]!==-1) continue; const a=sets[i], b=sets[j];
+                const inter=[...a].filter(x=>b.has(x)).length; const union=new Set([...a,...b]).size; const jacc = union? inter/union:0;
+                if(jacc>=0.5) labels[j]=cid;
+              }
+              cid++;
+            }
+            const rep = new Map();
+            labels.forEach((l,idx)=>{ if(!rep.has(l)) rep.set(l, norms[idx]); });
+            return { labels, names: rep };
+          }
+          function monthKey(d){ const dt=new Date(d); if(!isFinite(dt.getTime())) return ''; return dt.toISOString().slice(0,7); }
+
+          function autoMap(header){
+            const lc = header.map(h=>h.toLowerCase());
+            const get = (...alts)=>{ for(const a of alts){ const idx = lc.findIndex(x=> x.includes(a)); if(idx!==-1) return idx; } return -1; };
+            return {
+              date: get('date','posting','posted','transaction','дата'),
+              amount: get('amount','sum','сумма','debit','credit'),
+              currency: get('currency','валют'),
+              description: get('description','memo','details','назначение','описание'),
+              counterparty: get('counterparty','name','payee','контраг','получател','merchant'),
+              category: get('category','категор'),
+              account: get('account','iban','счет','счёт'),
+            };
+          }
+
+          function parseCSVToTx(txt){
+            const { header, rows } = csvParse(txt);
+            const map = autoMap(header);
+            const pick = (r,i)=> (i>=0? (r[i]||'').trim() : '');
+            const tx = rows.map(r=>({
+              date: new Date(pick(r,map.date)).toISOString(),
+              amount: parseFloat(pick(r,map.amount).replace(' ','').replace(',','.'))||0,
+              currency: pick(r,map.currency)||'XXX',
+              description: pick(r,map.description)||'',
+              counterparty: pick(r,map.counterparty)||undefined,
+              category: pick(r,map.category)||undefined,
+              account: pick(r,map.account)||undefined,
+            })).filter(t=>t.date && !isNaN(t.amount));
+            return { tx, header, map };
+          }
+
+          function categorize(tx, rules){
+            const ruleMatch = (desc)=>{
+              for(const r of rules){ try{ const re=new RegExp(r.pattern, r.flags||'i'); if(re.test(desc)) return r.category; }catch{} }
+              return null;
+            };
+            const defaultMap = [
+              { re: /(ub\\s*e\\s*r|ride)/i, cat: 'Transport' },
+              { re: /(grocery|market|super|продукт|магазин)/i, cat: 'Groceries' },
+              { re: /(netflix|spotify|yandex|apple\\s*music|подпис)/i, cat: 'Subscriptions' },
+              { re: /(rent|аренд|ипотек)/i, cat: 'Housing' },
+              { re: /(atm|commission|fee|комисси)/i, cat: 'Fees' },
+              { re: /(salary|payroll|заработ|зарплат|income)/i, cat: 'Income' },
+              { re: /(cafe|coffee|restaurant|кафе|ресторан)/i, cat: 'Dining' },
+              { re: /(pharmacy|аптек)/i, cat: 'Health' },
+            ];
+            for(const t of tx){
+              const desc = (t.description||'') + ' ' + (t.counterparty||'');
+              const fromRule = ruleMatch(desc);
+              if(fromRule){ t.category = fromRule; continue; }
+              const found = defaultMap.find(m=> m.re.test(desc));
+              t.category = found? found.cat : (t.amount>0? 'Income' : 'Other');
+            }
+            return tx;
+          }
+
+          function computeAggregates(tx){
+            const byCategoryMap = new Map();
+            const byMonthMap = new Map();
+            const feeTypes = new Map();
+            const descs = tx.map(t=>t.description||'');
+            const clusters = clusterCounterparties(descs);
+            const cpMap = new Map();
+            tx.forEach((t, idx)=>{
+              const key = (t.counterparty || clusters.names.get(clusters.labels[idx]) || 'OTHER');
+              if(!cpMap.has(key)) cpMap.set(key, []);
+              cpMap.get(key).push(t);
+            });
+
+            for(const t of tx){
+              const cat = t.category || 'Other';
+              byCategoryMap.set(cat, (byCategoryMap.get(cat)||0) + Math.abs(t.amount<0? t.amount : (cat==='Income'? t.amount : 0)));
+              const mk = monthKey(t.date); if(!mk) continue;
+              const m = byMonthMap.get(mk) || { income:0, expense:0 };
+              if(t.amount>=0) m.income += t.amount; else m.expense += -t.amount;
+              byMonthMap.set(mk, m);
+              if(/fee|комисси|commission/i.test(t.category||t.description||'')) feeTypes.set('Bank fees', (feeTypes.get('Bank fees')||0) + Math.abs(t.amount<0? t.amount:0));
+            }
+
+            const byCategory = [...byCategoryMap.entries()].map(([category, amount])=>({category, amount})).sort((a,b)=>b.amount-a.amount);
+            const byMonth = [...byMonthMap.entries()].map(([month, v])=>({month, income: +v.income.toFixed(2), expense: +v.expense.toFixed(2)})).sort((a,b)=> a.month.localeCompare(b.month));
+
+            const recurring = [];
+            for(const [cp, arr] of cpMap){
+              if(arr.length<3) continue;
+              const months = new Map();
+              for(const t of arr){ const mk=monthKey(t.date); months.set(mk, (months.get(mk)||0)+1); }
+              const uniqMonths = [...months.keys()].filter(Boolean);
+              if(uniqMonths.length>=3){
+                const avg = Math.abs(arr.reduce((s,t)=> s + (t.amount<0? t.amount:0), 0))/arr.length;
+                recurring.push({ counterparty: cp, cadence: 'monthly', avg: +avg.toFixed(2) });
+              }
+            }
+
+            const fees = [...feeTypes.entries()].map(([type, amount])=>({type, amount}));
+            return { byCategory, byMonth, recurring, fees };
+          }
+
+          function toCSV(tx){
+            if(!tx.length) return '';
+            const header = Object.keys(tx[0]);
+            const esc = (v)=> ('\"'+String(v??'').replace(/\"/g,'\"\"')+'\"');
+            const rows = [header.join(','), ...tx.map(t=> header.map(h=> esc((t)[h])).join(','))];
+            return rows.join('\\n');
+          }
+
+          onmessage = async (e)=>{
+            const { type, payload } = e.data;
+            if(type==='PARSE_FILES'){
+              const results = [];
+              for(const f of payload.files){
+                const buf = await f.arrayBuffer();
+                const txt = new TextDecoder('utf-8').decode(buf);
+                if(/<OFX>/i.test(txt)){
+                  results.push(...parseOFX(txt));
+                } else if(/:20:/.test(txt) && /:61:/.test(txt)){
+                  results.push(...parseMT940(txt));
+                } else {
+                  const { tx } = parseCSVToTx(txt);
+                  results.push(...tx);
+                }
+              }
+              postMessage({ type:'PARSE_DONE', payload: results.slice(0, 50000) });
+            }
+            if(type==='PROCESS_TX'){
+              const { tx, rules } = payload;
+              const cleaned = tx.map(t=> ({...t, description: (t.description||'').trim()}));
+              const categorized = categorize(cleaned, rules||[]);
+              const aggr = computeAggregates(categorized);
+              postMessage({ type:'PROCESS_DONE', payload: { tx: categorized, aggregates: aggr } });
+            }
+            if(type==='EXPORT_CSV'){
+              const { tx } = payload; const csv = toCSV(tx);
+              postMessage({ type:'EXPORT_CSV_DONE', payload: csv });
+            }
+          };
+        `;
+        const blob = new Blob([code], { type: 'application/javascript' });
+        return new Worker(URL.createObjectURL(blob), { type: 'module' });
+      }
+
+      // --- LLM (local heuristic + optional remote) ---
+      const SYSTEM_PROMPT_RU = "Ты — финансовый ассистент. Используй только агрегированные данные пользователя (не храни сырой текст транзакций). Давай аккуратные, практичные рекомендации по бюджету, подпискам, подушке безопасности и снижению ненужных расходов. Не давай инвестиционных советов и не обещай доходности. Если данных мало — запроси загрузку большего периода.";
+      const SYSTEM_PROMPT_EN = "You are a financial assistant. Use only the user's aggregated data (do not store raw transaction text). Provide careful, practical recommendations for budgeting, subscriptions, emergency fund, and trimming unnecessary expenses. Do not provide investment advice or promise returns. If data is scarce, ask for a longer period.";
+
+      async function getLLMAdvice(input, opts){
+        const { aggregates, baseCurrency } = input;
+        const totalIncome = aggregates.byMonth.reduce((s,m)=> s+m.income,0);
+        const totalExpense = aggregates.byMonth.reduce((s,m)=> s+m.expense,0);
+        const savingsRate = totalIncome? (1 - totalExpense/Math.max(totalIncome,1)) : 0;
+        const bigCats = aggregates.byCategory.slice(0,3).map(x=> x.category+` (${x.amount.toFixed(0)} ${baseCurrency})`);
+        const subs = aggregates.recurring.slice(0,5).map(r=> r.counterparty+` ~${r.avg.toFixed(0)} ${baseCurrency}/mo`);
+
+        const local = {
+          summary: input.locale.startsWith('ru')
+            ? `Сбережения: ${(savingsRate*100).toFixed(1)}%. Крупные категории: ${bigCats.join(', ')}. Подписки: ${subs.join(', ')||'нет данных'}.`
+            : `Savings rate: ${(savingsRate*100).toFixed(1)}%. Top categories: ${bigCats.join(', ')}. Subscriptions: ${subs.join(', ')||'n/a'}.`,
+          quickWins: input.locale.startsWith('ru')
+            ? [ subs[0]? `Проверьте подписку: ${subs[0]}` : 'Добавьте больше данных за прошлые месяцы', 'Пересмотрите комиссии банка', 'Установите дневной лимит на “кафе/рестораны”' ]
+            : [ subs[0]? `Review subscription: ${subs[0]}` : 'Add more months for better insight', 'Review bank fees', 'Set a daily cap for “Dining”' ],
+          monthlyPlan: input.locale.startsWith('ru')
+            ? [ '1) Отложить 10% дохода на подушку безопасности', '2) Зафиксировать список подписок и 1–2 отменить', '3) Снизить топ-1 категорию на 10–15%' ]
+            : [ '1) Set aside 10% income for emergency fund', '2) Inventory subscriptions and cancel 1–2', '3) Reduce top-1 category by 10–15%' ],
+          disclaimers: input.locale.startsWith('ru')
+            ? [ 'Не является инвестсоветом', 'Оценки основаны на агрегированных данных' ]
+            : [ 'Not investment advice', 'Estimates based on aggregates only' ]
+        };
+
+        if(!opts.allowRemote || !opts.tgiURL) return local;
+
+        try{
+          const sys = opts.lang==='ru'? SYSTEM_PROMPT_RU : SYSTEM_PROMPT_EN;
+          const body = {
+            inputs: `SYSTEM: ${sys}\nUSER(JSON): ${JSON.stringify(input)}`,
+            parameters: { max_new_tokens: 420, temperature: 0.2 }
+          };
+          const r = await fetch(opts.tgiURL, { method:'POST', headers:{ 'Content-Type':'application/json', ...(opts.tgiToken? { Authorization: \`Bearer \${opts.tgiToken}\` }: {}) }, body: JSON.stringify(body) });
+          if(r.ok){
+            const j = await r.json();
+            const txt = j.generated_text || (Array.isArray(j) ? j[0]?.generated_text : '') || '';
+            const parsed = JSON.parse(txt.trim());
+            return parsed;
+          }
+        }catch(e){}
+        return local;
+      }
+
+      // --- Demo data (3 CSV variants) ---
+      const demo1 = `Date,Description,Amount,Currency,Account,Category
+2025-09-01,Salary,4500,USD,Main,Income
+2025-09-02,UBER *TRIP,-13.5,USD,Main,
+2025-09-02,Netflix,-9.99,USD,Main,
+2025-09-07,Supermarket,-72.10,USD,Main,
+2025-10-01,Salary,4500,USD,Main,Income
+2025-10-02,UBER BV,-11.2,USD,Main,
+2025-10-02,Spotify,-9.99,USD,Main,
+2025-10-10,Super Market,-66.40,USD,Main,
+2025-11-01,Salary,4500,USD,Main,Income
+2025-11-02,UBER TRIP,-14.7,USD,Main,
+2025-11-03,Supermarket,-70.00,USD,Main,`;
+      const demo2 = `Дата;Мемо;Сумма;Валюта;Счёт
+2025-09-05;Комиссия банка;-3,5;USD;Main
+2025-09-08;Кафе;-7,80;USD;Main
+2025-10-08;Кафе;-6,50;USD;Main
+2025-11-08;Кафе;-8,20;USD;Main`;
+      const demo3 = `posted\tmerchant\tamount\tcurrency
+2025-09-15\tPharmacy\t-12.40\tUSD
+2025-10-15\tPharmacy\t-10.00\tUSD
+2025-11-15\tPharmacy\t-11.50\tUSD`;
+
+      // --- Components ---
+      function Header({lang, setLang, baseCurrency, setBaseCurrency, theme, setTheme}){
+        const t = dict[lang];
+        return (
+          <div className="flex flex-wrap gap-2 items-center justify-between mb-4">
+            <h1 className="text-xl font-semibold">{t.appTitle}</h1>
+            <div className="flex flex-wrap gap-2 items-center">
+              <label className="text-sm">{t.locale}</label>
+              <select className="px-2 py-1 rounded-xl border dark:bg-slate-900" value={lang} onChange={e=>setLang(e.target.value)}>
+                <option value="ru">Русский</option>
+                <option value="en">English</option>
+              </select>
+              <label className="text-sm">{t.baseCurrency}</label>
+              <input value={baseCurrency} onChange={e=>setBaseCurrency(e.target.value.toUpperCase())} className="w-20 px-2 py-1 rounded-xl border dark:bg-slate-900" />
+              <label className="text-sm">{t.theme}</label>
+              <select className="px-2 py-1 rounded-xl border dark:bg-slate-900" value={theme} onChange={e=>setTheme(e.target.value)}>
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </div>
+          </div>
+        );
+      }
+
+      function FileDrop({lang, onFiles}){
+        const t = dict[lang];
+        const [over, setOver] = useState(false);
+        return (
+          <div className={"border-2 border-dashed rounded-2xl p-8 text-center "+(over? 'bg-slate-50 dark:bg-slate-800':'')}
+            onDragOver={e=>{e.preventDefault(); setOver(true);} }
+            onDragLeave={()=>setOver(false)}
+            onDrop={e=>{e.preventDefault(); setOver(false); const files = [...(e.dataTransfer?.files||[])]; onFiles(files); }}>
+            <div className="text-slate-600 dark:text-slate-300 mb-2">{t.dropFiles}</div>
+            <div className="text-slate-400 text-sm mb-2">{t.orClick}</div>
+            <input type="file" multiple onChange={e=> onFiles([...(e.target.files||[])])} />
+            <div className="mt-4 text-left">
+              <details className="text-sm cursor-pointer">
+                <summary>Demo CSV</summary>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+                  {[demo1,demo2,demo3].map((d,idx)=> (
+                    <SecondaryButton key={idx} onClick={()=>{
+                      const f = new File([d], `demo${idx+1}.csv`, { type:'text/csv' });
+                      onFiles([f]);
+                    }}>demo{idx+1}.csv</SecondaryButton>
+                  ))}
+                </div>
+              </details>
+            </div>
+          </div>
+        );
+      }
+
+      function ColumnMapper({lang, header, sampleRows, mapping, setMapping}){
+        const t = dict[lang];
+        const fields = ['date','amount','currency','description','counterparty','category','account'];
+        return (
+          <Card title={t.mapping}>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                {fields.map((f)=> (
+                  <div key={f} className="flex items-center gap-2 mb-2">
+                    <label className="w-36 text-sm">{t[f]}</label>
+                    <select className="flex-1 px-2 py-1 rounded-xl border dark:bg-slate-900" value={mapping[f]??''} onChange={e=> setMapping({...mapping, [f]: Number(e.target.value)})}>
+                      <option value="-1">—</option>
+                      {header.map((h,idx)=> <option key={idx} value={idx}>{h}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div className="text-sm font-medium mb-1">{t.preview}</div>
+                <div className="max-h-60 overflow-auto border rounded-xl">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr>{header.map((h,idx)=>(<th key={idx} className="px-2 py-1 text-left sticky top-0 bg-slate-50 dark:bg-slate-800">{h}</th>))}</tr>
+                    </thead>
+                    <tbody>
+                      {sampleRows.slice(0,50).map((r,ri)=> (
+                        <tr key={ri} className="odd:bg-slate-50/50 dark:odd:bg-slate-800/50">
+                          {r.map((c,ci)=> <td key={ci} className="px-2 py-1 whitespace-nowrap">{c}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </Card>
+        );
+      }
+
+      function Validations({lang, rows}){
+        const t = dict[lang];
+        const issues = useMemo(()=>{
+          const out=[];
+          rows.forEach((r,i)=>{
+            if(!r.date || isNaN(new Date(r.date).getTime())) out.push(`${t.date} invalid @${i+1}`);
+            if(typeof r.amount!=="number" || isNaN(r.amount)) out.push(`${t.amount} invalid @${i+1}`);
+          });
+          return out;
+        },[rows,lang]);
+        return (
+          <Card title={t.validations}>
+            {issues.length? <ul className="list-disc pl-5 text-sm">{issues.slice(0,50).map((x,i)=>(<li key={i}>{x}</li>))}</ul> : <div className="text-sm text-green-600">OK</div>}
+          </Card>
+        );
+      }
+
+      function KPIs({lang, aggregates, fmt}){
+        const t = dict[lang];
+        const totalInc = aggregates.byMonth.reduce((s,m)=> s+m.income,0);
+        const totalExp = aggregates.byMonth.reduce((s,m)=> s+m.expense,0);
+        const savingsRate = totalInc? (1-totalExp/Math.max(totalInc,1)) : 0;
+        const fixedShare = aggregates.byCategory.filter(c=> /Housing|Subscriptions|Fees/i.test(c.category)).reduce((s,c)=> s+c.amount,0) / Math.max(totalExp,1);
+        const nonIncomeCats = aggregates.byCategory.filter(c=> c.category!=='Income').length || 1;
+        const avgTicket = totalExp? totalExp / nonIncomeCats : 0;
+        return (
+          <Card title={t.kpi}>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div><div className="text-xs opacity-70">Savings %</div><div className="text-xl font-semibold">{(savingsRate*100).toFixed(1)}%</div></div>
+              <div><div className="text-xs opacity-70">Fixed costs share</div><div className="text-xl font-semibold">{(fixedShare*100).toFixed(1)}%</div></div>
+              <div><div className="text-xs opacity-70">Avg ticket</div><div className="text-xl font-semibold">{fmt.money.format(avgTicket||0)}</div></div>
+              <div><div className="text-xs opacity-70">Top category</div><div className="text-xl font-semibold">{(aggregates.byCategory[0] && aggregates.byCategory[0].category) || '—'}</div></div>
+            </div>
+          </Card>
+        );
+      }
+
+      function Charts({lang, aggregates}){
+        const t = dict[lang];
+        const pieData = aggregates.byCategory.filter(c=> c.category!=='Income');
+        const byMonth = aggregates.byMonth.map(m=> ({...m, net: +(m.income - m.expense).toFixed(2)}));
+        const topCP = aggregates.recurring.slice(0,10).map(r=> ({ name: r.counterparty, value: r.avg }));
+        return (
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card title={t.expensesByCat}>
+              <div className="h-60">
+                <ResponsiveContainer width="100%" height="100%">
+                  <Treemap data={pieData.map(d=>({ name:d.category, size:d.amount }))} dataKey="size" stroke="#8884d8" fill="#8884d8" />
+                </ResponsiveContainer>
+              </div>
+            </Card>
+            <Card title={t.trend}>
+              <div className="h-60">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={byMonth}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <RTooltip />
+                    <Line type="monotone" dataKey="income" stroke="#16a34a" />
+                    <Line type="monotone" dataKey="expense" stroke="#ef4444" />
+                    <Line type="monotone" dataKey="net" stroke="#3b82f6" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+            <Card title={t.topCounterparties}>
+              <div className="h-60">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topCP}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" hide/>
+                    <YAxis />
+                    <RTooltip />
+                    <Bar dataKey="value" fill="#64748b" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
+          </div>
+        );
+      }
+
+      function AdvicePanel({lang, advice}){
+        const t = dict[lang];
+        if(!advice) return null;
+        return (
+          <Card title={t.advice}>
+            <div className="space-y-4">
+              <div className="text-sm">{advice.summary}</div>
+              <div>
+                <div className="text-xs uppercase opacity-60 mb-1">{t.quickActions}</div>
+                <ul className="list-disc pl-5 text-sm">
+                  {advice.quickWins.map((x,i)=>(<li key={i}><label className="inline-flex items-center gap-2"><input type="checkbox" className="accent-slate-600"/> <span>{x}</span></label></li>))}
+                </ul>
+              </div>
+              <div>
+                <div className="text-xs uppercase opacity-60 mb-1">{t.ideasMonth}</div>
+                <ul className="list-disc pl-5 text-sm">{advice.monthlyPlan.map((x,i)=>(<li key={i}>{x}</li>))}</ul>
+              </div>
+              <div>
+                <div className="text-xs uppercase opacity-60 mb-1">{t.disclaimer}</div>
+                <ul className="list-disc pl-5 text-xs opacity-70">{advice.disclaimers.map((x,i)=>(<li key={i}>{x}</li>))}</ul>
+              </div>
+            </div>
+          </Card>
+        );
+      }
+
+      function RulesEditor({lang, rules, setRules}){
+        const t = dict[lang];
+        const [pattern,setPattern] = useState('');
+        const [category,setCategory] = useState('');
+        return (
+          <Card title={t.rules} right={<Button onClick={()=>{ if(!pattern||!category) return; const nr=[...rules, {pattern, category, flags:'i'}]; setRules(nr); saveRules(nr); setPattern(''); setCategory(''); }}>{t.addRule}</Button>}>
+            <div className="flex gap-2 mb-3">
+              <input placeholder="/pattern/" value={pattern} onChange={e=>setPattern(e.target.value)} className="flex-1 px-2 py-1 rounded-xl border dark:bg-slate-900"/>
+              <input placeholder="Category" value={category} onChange={e=>setCategory(e.target.value)} className="w-48 px-2 py-1 rounded-xl border dark:bg-slate-900"/>
+            </div>
+            <div className="text-xs opacity-70 mb-2">Regexp matches description/counterparty → assign category.</div>
+            <div className="max-h-40 overflow-auto">
+              <table className="min-w-full text-xs">
+                <thead><tr><th className="text-left px-2">Pattern</th><th className="text-left px-2">Category</th></tr></thead>
+                <tbody>
+                  {rules.map((r,i)=> (
+                    <tr key={i} className="odd:bg-slate-50/50 dark:odd:bg-slate-800/50">
+                      <td className="px-2 py-1 font-mono">{r.pattern}</td>
+                      <td className="px-2 py-1">{r.category}</td>
+                      <td className="px-2 py-1 text-right"><SecondaryButton onClick={()=>{ const nr=rules.filter((_,j)=>j!==i); setRules(nr); saveRules(nr); }}>×</SecondaryButton></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        );
+      }
+
+      // --- Main App ---
+      function App(){
+        const [lang,setLang] = useState('ru');
+        const [theme,setTheme] = useState('system');
+        const [baseCurrency,setBaseCurrency] = useState('USD');
+        const [step,setStep] = useState(0);
+        const workerRef = useRef(null);
+        const [parsed,setParsed] = useState([]);
+        const [header,setHeader] = useState([]);
+        const [sampleRows,setSampleRows] = useState([]);
+        const [mapping,setMapping] = useState({});
+        const [tx,setTx] = useState([]);
+        const [aggregates,setAggregates] = useState({ byCategory:[], byMonth:[], recurring:[], fees:[] });
+        const [advice,setAdvice] = useState(null);
+        const [rules,setRules] = useState(loadRules());
+        const [allowRemoteLLM,setAllowRemoteLLM] = useState(false);
+        const [testsOutput,setTestsOutput] = useState('');
+
+        const locale = lang==='ru'? 'ru-RU' : 'en-US';
+        const fmt = useFormatter(locale, baseCurrency);
+
+        // Theme effect
+        useEffect(()=>{
+          const root = document.documentElement; const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const wantDark = theme==='dark' || (theme==='system' && sysDark);
+          root.classList.toggle('dark', wantDark);
+          root.classList.toggle('bg-slate-50', !wantDark); root.classList.toggle('bg-slate-950', wantDark);
+          root.classList.toggle('text-slate-900', !wantDark); root.classList.toggle('text-slate-100', wantDark);
+        },[theme]);
+
+        // Init worker
+        useEffect(()=>{
+          const w = createWorker(); workerRef.current = w;
+          w.onmessage = (e)=>{
+            const { type, payload } = e.data;
+            if(type==='PARSE_DONE'){
+              setParsed(payload);
+              if(payload.length){
+                const h = ['date','amount','currency','description','counterparty','category','account'];
+                setHeader(h);
+                setSampleRows(payload.slice(0,50).map((t)=> [t.date, String(t.amount), t.currency, t.description, t.counterparty||'', t.category||'', t.account||''] ));
+                setMapping({ date:0, amount:1, currency:2, description:3, counterparty:4, category:5, account:6 });
+                setStep(1);
+              }
+            }
+            if(type==='PROCESS_DONE'){
+              setTx(payload.tx); setAggregates(payload.aggregates);
+              (async()=>{
+                const adv = await getLLMAdvice({ aggregates: payload.aggregates, locale, baseCurrency }, { lang, allowRemote: allowRemoteLLM });
+                setAdvice(adv);
+              })();
+              setStep(2);
+            }
+            if(type==='EXPORT_CSV_DONE'){
+              const blob = new Blob([payload], { type:'text/csv' });
+              const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'transactions_categorized.csv'; a.click(); URL.revokeObjectURL(url);
+            }
+          };
+          return ()=>{ w.terminate(); }
+        },[lang,locale,allowRemoteLLM]);
+
+        function onFiles(files){ workerRef.current?.postMessage({ type:'PARSE_FILES', payload:{ files } }); }
+
+        function processMapped(){
+          workerRef.current?.postMessage({ type:'PROCESS_TX', payload:{ tx: parsed, rules } });
+        }
+
+        function exportCSV(){ workerRef.current?.postMessage({ type:'EXPORT_CSV', payload:{ tx } }); }
+
+        function exportPDF(){
+          const w = window.open('', '_blank'); if(!w) return;
+          const rows = aggregates.byCategory.map(c=> `<tr><td>${c.category}</td><td style="text-align:right">${c.amount.toFixed(2)} ${baseCurrency}</td></tr>`).join('');
+          w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Report</title></head><body>
+            <h2>Report</h2>
+            <h3>By Category</h3>
+            <table border="1" cellpadding="6" cellspacing="0">${rows}</table>
+            <p><small>Privacy: generated locally in your browser.</small></p>
+            <script>window.print();<\/script>
+          </body></html>`);
+          w.document.close();
+        }
+
+        function erase(){ setParsed([]); setTx([]); setAggregates({ byCategory:[], byMonth:[], recurring:[], fees:[]}); setAdvice(null); saveRules([]); setRules([]); localStorage.clear(); wipeIndexedDB(); }
+
+        function runTests(){
+          const msgs=[]; const pass=(m)=>msgs.push('✓ '+m);
+          onFiles([new File([demo1], 'a.csv')]); pass('CSV accepted');
+          const ofx = `<OFX><STMTTRN><DTPOSTED>20251101</DTPOSTED><TRNAMT>-10.00</TRNAMT><NAME>NETFLIX</NAME><MEMO>SUB</MEMO><CURRENCY>USD</CURRENCY></STMTTRN></OFX>`;
+          onFiles([new File([ofx], 'a.ofx')]); pass('OFX accepted');
+          const mt = `:20:START\n:61:251001D12,34\n:86:PHARMACY\n:61:251015C100,00\n:86:SALARY`;
+          onFiles([new File([mt], 'a.mt940')]); pass('MT940 accepted');
+          setTestsOutput(msgs.join('\n'));
+        }
+
+        const t = dict[lang];
+
+        return (
+          <div className="max-w-6xl mx-auto p-4">
+            <Header lang={lang} setLang={setLang} baseCurrency={baseCurrency} setBaseCurrency={setBaseCurrency} theme={theme} setTheme={setTheme} />
+
+            <div className="grid md:grid-cols-3 gap-4 mb-4">
+              {[0,1,2].map(i=> (
+                <div key={i} className={(i<=step? 'bg-slate-800 text-white':'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300')+" rounded-2xl p-3 text-sm"}>
+                  {t.onboarding[i]}
+                </div>
+              ))}
+            </div>
+
+            {step===0 && (
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="md:col-span-2">
+                  <FileDrop lang={lang} onFiles={onFiles} />
+                </div>
+                <div className="space-y-3">
+                  <Card title={t.privacy} right={<SecondaryButton onClick={()=> alert('Мы обрабатываем данные локально. Внешний LLM использует только агрегаты. Трекинг отключён.')}>{t.openPrivacy}</SecondaryButton>}>
+                    <div className="text-sm opacity-80">Local-only by default. Clear with “{t.erase}”.</div>
+                    <label className="flex items-center gap-2 mt-2 text-sm"><input type="checkbox" checked={allowRemoteLLM} onChange={e=>setAllowRemoteLLM(e.target.checked)} className="accent-slate-600"/> {t.optInLLM}</label>
+                  </Card>
+                  <RulesEditor lang={lang} rules={rules} setRules={setRules} />
+                  <Card title="Dev">
+                    <div className="flex gap-2">
+                      <SecondaryButton onClick={runTests}>{t.runTests}</SecondaryButton>
+                      <SecondaryButton onClick={erase}>{t.erase}</SecondaryButton>
+                    </div>
+                    {!!testsOutput && <pre className="mt-2 text-xs whitespace-pre-wrap">{testsOutput}</pre>}
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {step===1 && (
+              <div className="space-y-4">
+                <ColumnMapper lang={lang} header={header} sampleRows={sampleRows} mapping={mapping} setMapping={setMapping} />
+                <div className="flex justify-between">
+                  <SecondaryButton onClick={()=>setStep(0)}>{t.back}</SecondaryButton>
+                  <Button onClick={processMapped}>{t.process}</Button>
+                </div>
+                <Validations lang={lang} rows={parsed.slice(0, 100)} />
+              </div>
+            )}
+
+            {step===2 && (
+              <div className="space-y-4">
+                <KPIs lang={lang} aggregates={aggregates} fmt={fmt} />
+                <Charts lang={lang} aggregates={aggregates} />
+                <AdvicePanel lang={lang} advice={advice} />
+                <div className="flex flex-wrap gap-2">
+                  <SecondaryButton onClick={()=>setStep(1)}>{t.back}</SecondaryButton>
+                  <Button onClick={exportCSV}>{t.exportCSV}</Button>
+                  <Button onClick={exportPDF}>{t.exportPDF}</Button>
+                  <SecondaryButton onClick={erase}>{t.erase}</SecondaryButton>
+                </div>
+              </div>
+            )}
+
+            <footer className="mt-8 text-xs opacity-60">
+              <div>© <span>{new Date().getFullYear()}</span> — Local-first. No tracking.</div>
+            </footer>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
